@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,10 +15,14 @@ import (
 )
 
 const (
-	authEndpoint  = "https://open.feishu.cn/open-apis/authen/v1/authorize"
+	authEndpoint = "https://open.feishu.cn/open-apis/authen/v1/authorize"
+	redirectURI  = "http://127.0.0.1:8088/callback"
+	scope        = "docx:document:readonly drive:file:readonly wiki:wiki:readonly"
+)
+
+var (
 	tokenEndpoint = "https://open.feishu.cn/open-apis/authen/v1/oidc/access_token"
-	redirectURI   = "http://127.0.0.1:8088/callback"
-	scope         = "docx:document:readonly drive:file:readonly wiki:wiki:readonly"
+	defaultClient = &http.Client{Timeout: 30 * time.Second}
 )
 
 type OAuthToken struct {
@@ -56,6 +61,9 @@ func BuildAuthURL(appID, state, codeChallenge string) string {
 }
 
 func ExchangeCodeForToken(clientID, clientSecret, code, codeVerifier string) (*OAuthToken, error) {
+	if code == "" {
+		return nil, errors.New("code is required")
+	}
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("client_id", clientID)
@@ -68,6 +76,9 @@ func ExchangeCodeForToken(clientID, clientSecret, code, codeVerifier string) (*O
 }
 
 func RefreshUserToken(clientID, clientSecret, refreshToken string) (*OAuthToken, error) {
+	if refreshToken == "" {
+		return nil, errors.New("refreshToken is required")
+	}
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("client_id", clientID)
@@ -84,14 +95,13 @@ func doTokenRequest(data url.Values) (*OAuthToken, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := defaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10MB limit
 	if err != nil {
 		return nil, err
 	}

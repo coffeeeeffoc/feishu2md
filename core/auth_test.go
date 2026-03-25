@@ -3,6 +3,9 @@ package core
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -123,5 +126,121 @@ func TestConstants(t *testing.T) {
 	}
 	if !strings.Contains(tokenEndpoint, "open.feishu.cn") {
 		t.Errorf("tokenEndpoint should contain open.feishu.cn")
+	}
+}
+
+func TestExchangeCodeForToken(t *testing.T) {
+	expectedToken := &OAuthToken{
+		AccessToken:  "test-access-token",
+		RefreshToken: "test-refresh-token",
+		ExpiresIn:    7200,
+		TokenType:    "Bearer",
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+			t.Errorf("Content-Type = %s, want application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+		}
+
+		resp := struct {
+			Code int        `json:"code"`
+			Msg  string     `json:"msg"`
+			Data OAuthToken `json:"data"`
+		}{
+			Code: 0,
+			Msg:  "success",
+			Data: *expectedToken,
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	// Override the token endpoint for testing
+	originalEndpoint := tokenEndpoint
+	tokenEndpoint = server.URL
+	defer func() { tokenEndpoint = originalEndpoint }()
+
+	token, err := ExchangeCodeForToken("test-client-id", "test-client-secret", "test-code", "test-verifier")
+	if err != nil {
+		t.Fatalf("ExchangeCodeForToken() error = %v", err)
+	}
+	if token.AccessToken != expectedToken.AccessToken {
+		t.Errorf("AccessToken = %s, want %s", token.AccessToken, expectedToken.AccessToken)
+	}
+	if token.RefreshToken != expectedToken.RefreshToken {
+		t.Errorf("RefreshToken = %s, want %s", token.RefreshToken, expectedToken.RefreshToken)
+	}
+	if token.ExpiresIn != expectedToken.ExpiresIn {
+		t.Errorf("ExpiresIn = %d, want %d", token.ExpiresIn, expectedToken.ExpiresIn)
+	}
+}
+
+func TestExchangeCodeForTokenValidation(t *testing.T) {
+	_, err := ExchangeCodeForToken("test-client-id", "test-client-secret", "", "test-verifier")
+	if err == nil {
+		t.Error("ExchangeCodeForToken() expected error for empty code, got nil")
+	}
+	if err.Error() != "code is required" {
+		t.Errorf("error message = %s, want 'code is required'", err.Error())
+	}
+}
+
+func TestRefreshUserToken(t *testing.T) {
+	expectedToken := &OAuthToken{
+		AccessToken:  "new-access-token",
+		RefreshToken: "new-refresh-token",
+		ExpiresIn:    7200,
+		TokenType:    "Bearer",
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
+			t.Errorf("Content-Type = %s, want application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+		}
+
+		resp := struct {
+			Code int        `json:"code"`
+			Msg  string     `json:"msg"`
+			Data OAuthToken `json:"data"`
+		}{
+			Code: 0,
+			Msg:  "success",
+			Data: *expectedToken,
+		}
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	originalEndpoint := tokenEndpoint
+	tokenEndpoint = server.URL
+	defer func() { tokenEndpoint = originalEndpoint }()
+
+	token, err := RefreshUserToken("test-client-id", "test-client-secret", "test-refresh-token")
+	if err != nil {
+		t.Fatalf("RefreshUserToken() error = %v", err)
+	}
+	if token.AccessToken != expectedToken.AccessToken {
+		t.Errorf("AccessToken = %s, want %s", token.AccessToken, expectedToken.AccessToken)
+	}
+	if token.RefreshToken != expectedToken.RefreshToken {
+		t.Errorf("RefreshToken = %s, want %s", token.RefreshToken, expectedToken.RefreshToken)
+	}
+}
+
+func TestRefreshUserTokenValidation(t *testing.T) {
+	_, err := RefreshUserToken("test-client-id", "test-client-secret", "")
+	if err == nil {
+		t.Error("RefreshUserToken() expected error for empty refreshToken, got nil")
+	}
+	if err.Error() != "refreshToken is required" {
+		t.Errorf("error message = %s, want 'refreshToken is required'", err.Error())
 	}
 }
