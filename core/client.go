@@ -14,7 +14,8 @@ import (
 )
 
 type Client struct {
-	larkClient *lark.Lark
+	larkClient      *lark.Lark
+	userAccessToken string // stores user access token
 }
 
 func NewClient(appID, appSecret string) *Client {
@@ -24,6 +25,20 @@ func NewClient(appID, appSecret string) *Client {
 			lark.WithTimeout(60*time.Second),
 			lark.WithApiMiddleware(lark_rate_limiter.Wait(4, 4)),
 		),
+	}
+}
+
+// NewClientWithUserToken creates a client that stores user access token for user-identity operations.
+// Note: The lark SDK requires user token to be passed per-method via lark.WithUserAccessToken().
+// This constructor stores the token in Client struct for use with method-level options.
+func NewClientWithUserToken(appID, appSecret, userToken string) *Client {
+	return &Client{
+		larkClient: lark.New(
+			lark.WithAppCredential(appID, appSecret),
+			lark.WithTimeout(60*time.Second),
+			lark.WithApiMiddleware(lark_rate_limiter.Wait(4, 4)),
+		),
+		userAccessToken: userToken,
 	}
 }
 
