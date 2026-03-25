@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/88250/lute"
 	"github.com/Wsine/feishu2md/core"
@@ -24,6 +25,27 @@ type DownloadOpts struct {
 
 var dlOpts = DownloadOpts{}
 var dlConfig core.Config
+
+// isTokenExpired checks if the user token is expired
+func isTokenExpired(cfg *core.Config) bool {
+	if cfg.Feishu.TokenExpireTime == 0 {
+		return true
+	}
+	return time.Now().Unix() >= cfg.Feishu.TokenExpireTime
+}
+
+// loadConfigWithRefresh loads config and returns updated config if token was refreshed
+func loadConfigWithRefresh() (*core.Config, error) {
+	configPath, err := core.GetConfigFilePath()
+	if err != nil {
+		return nil, err
+	}
+	config, err := core.ReadConfigFromFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
+}
 
 func downloadDocument(ctx context.Context, client *core.Client, url string, opts *DownloadOpts) error {
 	// Validate the url to download
@@ -246,20 +268,28 @@ func downloadWiki(ctx context.Context, client *core.Client, url string) error {
 
 func handleDownloadCommand(url string) error {
 	// Load config
-	configPath, err := core.GetConfigFilePath()
-	if err != nil {
-		return err
-	}
-	config, err := core.ReadConfigFromFile(configPath)
+	config, err := loadConfigWithRefresh()
 	if err != nil {
 		return err
 	}
 	dlConfig = *config
 
-	// Instantiate the client
-	client := core.NewClient(
-		dlConfig.Feishu.AppId, dlConfig.Feishu.AppSecret,
-	)
+	// Create client based on token availability
+	var client *core.Client
+	if config.Feishu.UserAccessToken != "" && !isTokenExpired(config) {
+		client = core.NewClientWithUserToken(
+			config.Feishu.AppId,
+			config.Feishu.AppSecret,
+			config.Feishu.UserAccessToken,
+		)
+		fmt.Println("Using user identity for download")
+	} else {
+		client = core.NewClient(
+			config.Feishu.AppId,
+			config.Feishu.AppSecret,
+		)
+		fmt.Println("Using app identity for download")
+	}
 	ctx := context.Background()
 
 	if dlOpts.batch {
