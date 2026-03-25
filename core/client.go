@@ -42,11 +42,15 @@ func NewClientWithUserToken(appID, appSecret, userToken string) *Client {
 	}
 }
 
-func (c *Client) DownloadImage(ctx context.Context, imgToken, outDir string) (string, error) {
-	var opts []lark.MethodOptionFunc
+func (c *Client) userTokenOpts() []lark.MethodOptionFunc {
 	if c.userAccessToken != "" {
-		opts = append(opts, lark.WithUserAccessToken(c.userAccessToken))
+		return []lark.MethodOptionFunc{lark.WithUserAccessToken(c.userAccessToken)}
 	}
+	return nil
+}
+
+func (c *Client) DownloadImage(ctx context.Context, imgToken, outDir string) (string, error) {
+	opts := c.userTokenOpts()
 	resp, _, err := c.larkClient.Drive.DownloadDriveMedia(ctx, &lark.DownloadDriveMediaReq{
 		FileToken: imgToken,
 	}, opts...)
@@ -72,10 +76,7 @@ func (c *Client) DownloadImage(ctx context.Context, imgToken, outDir string) (st
 }
 
 func (c *Client) DownloadImageRaw(ctx context.Context, imgToken, imgDir string) (string, []byte, error) {
-	var opts []lark.MethodOptionFunc
-	if c.userAccessToken != "" {
-		opts = append(opts, lark.WithUserAccessToken(c.userAccessToken))
-	}
+	opts := c.userTokenOpts()
 	resp, _, err := c.larkClient.Drive.DownloadDriveMedia(ctx, &lark.DownloadDriveMediaReq{
 		FileToken: imgToken,
 	}, opts...)
@@ -90,10 +91,7 @@ func (c *Client) DownloadImageRaw(ctx context.Context, imgToken, imgDir string) 
 }
 
 func (c *Client) GetDocxContent(ctx context.Context, docToken string) (*lark.DocxDocument, []*lark.DocxBlock, error) {
-	var opts []lark.MethodOptionFunc
-	if c.userAccessToken != "" {
-		opts = append(opts, lark.WithUserAccessToken(c.userAccessToken))
-	}
+	opts := c.userTokenOpts()
 	resp, _, err := c.larkClient.Drive.GetDocxDocument(ctx, &lark.GetDocxDocumentReq{
 		DocumentID: docToken,
 	}, opts...)
@@ -125,10 +123,7 @@ func (c *Client) GetDocxContent(ctx context.Context, docToken string) (*lark.Doc
 }
 
 func (c *Client) GetWikiNodeInfo(ctx context.Context, token string) (*lark.GetWikiNodeRespNode, error) {
-	var opts []lark.MethodOptionFunc
-	if c.userAccessToken != "" {
-		opts = append(opts, lark.WithUserAccessToken(c.userAccessToken))
-	}
+	opts := c.userTokenOpts()
 	resp, _, err := c.larkClient.Drive.GetWikiNode(ctx, &lark.GetWikiNodeReq{
 		Token: token,
 	}, opts...)
@@ -139,10 +134,7 @@ func (c *Client) GetWikiNodeInfo(ctx context.Context, token string) (*lark.GetWi
 }
 
 func (c *Client) GetDriveFolderFileList(ctx context.Context, pageToken *string, folderToken *string) ([]*lark.GetDriveFileListRespFile, error) {
-	var opts []lark.MethodOptionFunc
-	if c.userAccessToken != "" {
-		opts = append(opts, lark.WithUserAccessToken(c.userAccessToken))
-	}
+	opts := c.userTokenOpts()
 	resp, _, err := c.larkClient.Drive.GetDriveFileList(ctx, &lark.GetDriveFileListReq{
 		PageSize:    nil,
 		PageToken:   pageToken,
@@ -167,10 +159,7 @@ func (c *Client) GetDriveFolderFileList(ctx context.Context, pageToken *string, 
 }
 
 func (c *Client) GetWikiName(ctx context.Context, spaceID string) (string, error) {
-	var opts []lark.MethodOptionFunc
-	if c.userAccessToken != "" {
-		opts = append(opts, lark.WithUserAccessToken(c.userAccessToken))
-	}
+	opts := c.userTokenOpts()
 	resp, _, err := c.larkClient.Drive.GetWikiSpace(ctx, &lark.GetWikiSpaceReq{
 		SpaceID: spaceID,
 	}, opts...)
@@ -183,10 +172,7 @@ func (c *Client) GetWikiName(ctx context.Context, spaceID string) (string, error
 }
 
 func (c *Client) GetWikiNodeList(ctx context.Context, spaceID string, parentNodeToken *string) ([]*lark.GetWikiNodeListRespItem, error) {
-	var opts []lark.MethodOptionFunc
-	if c.userAccessToken != "" {
-		opts = append(opts, lark.WithUserAccessToken(c.userAccessToken))
-	}
+	opts := c.userTokenOpts()
 	resp, _, err := c.larkClient.Drive.GetWikiNodeList(ctx, &lark.GetWikiNodeListReq{
 		SpaceID:         spaceID,
 		PageSize:        nil,
