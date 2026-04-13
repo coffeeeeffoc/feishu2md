@@ -34,7 +34,7 @@ func isTokenExpired(cfg *core.Config) bool {
 	return time.Now().Unix() >= cfg.Feishu.TokenExpireTime
 }
 
-// loadConfigWithRefresh loads config and returns updated config if token was refreshed
+// loadConfigWithRefresh loads config and refreshes token if expired
 func loadConfigWithRefresh() (*core.Config, error) {
 	configPath, err := core.GetConfigFilePath()
 	if err != nil {
@@ -44,6 +44,26 @@ func loadConfigWithRefresh() (*core.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Auto-refresh token if expired but refresh_token is available
+	if config.Feishu.UserAccessToken != "" && isTokenExpired(config) && config.Feishu.RefreshToken != "" {
+		fmt.Println("User token expired, attempting auto-refresh...")
+		token, err := core.RefreshUserToken(config.Feishu.AppId, config.Feishu.AppSecret, config.Feishu.RefreshToken)
+		if err != nil {
+			fmt.Printf("Token refresh failed: %v\nFalling back to app identity. Run 'feishu2md login' to re-authenticate.\n", err)
+			config.Feishu.UserAccessToken = ""
+		} else {
+			config.Feishu.UserAccessToken = token.AccessToken
+			config.Feishu.RefreshToken = token.RefreshToken
+			config.Feishu.TokenExpireTime = time.Now().Unix() + int64(token.ExpiresIn)
+			if err := config.WriteConfig2File(configPath); err != nil {
+				fmt.Printf("Warning: failed to save refreshed token: %v\n", err)
+			} else {
+				fmt.Println("Token refreshed successfully.")
+			}
+		}
+	}
+
 	return config, nil
 }
 
@@ -81,14 +101,22 @@ func downloadDocument(ctx context.Context, client *core.Client, url string, opts
 	markdown := parser.ParseDocxContent(docx, blocks)
 
 	if !dlConfig.Output.SkipImgDownload {
+		imgTotal := len(parser.ImgTokens)
+		imgFailed := 0
 		for _, imgToken := range parser.ImgTokens {
 			localLink, err := client.DownloadImage(
 				ctx, imgToken, filepath.Join(opts.outputDir, dlConfig.Output.ImageDir),
 			)
 			if err != nil {
-				return err
+				imgFailed++
+				fmt.Printf("Warning: failed to download image [%d/%d] token=%s\n  error: %v\n  view:  https://open.feishu.cn/open-apis/drive/v1/medias/%s/download\n",
+					imgFailed, imgTotal, imgToken, err, imgToken)
+				continue
 			}
 			markdown = strings.Replace(markdown, imgToken, localLink, 1)
+		}
+		if imgFailed > 0 {
+			fmt.Printf("Image download summary: %d/%d succeeded, %d failed\n", imgTotal-imgFailed, imgTotal, imgFailed)
 		}
 	}
 
